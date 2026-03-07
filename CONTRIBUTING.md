@@ -1,6 +1,6 @@
-# Contributing to OpenGov MCP Server
+# Contributing to Socrata MCP Server
 
-Thank you for your interest in contributing to OpenGov MCP Server! This project enables MCP clients like Claude Desktop to access open government data through Socrata APIs.
+Thank you for your interest in contributing to Socrata MCP Server! This project enables MCP clients like Claude Desktop to access open government data through Socrata APIs.
 
 ## Getting Started
 
@@ -8,8 +8,8 @@ Thank you for your interest in contributing to OpenGov MCP Server! This project 
 
 1. **Clone the repository**:
    ```bash
-   git clone https://github.com/yourusername/opengov-mcp-server.git
-   cd opengov-mcp-server
+   git clone https://github.com/yourusername/socrata-mcp-server.git
+   cd socrata-mcp-server
    ```
 
 2. **Install dependencies**:

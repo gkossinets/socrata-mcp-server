@@ -50,7 +50,7 @@ async function createServer(transport?: OpenAICompatibleTransport): Promise<Serv
   console.error('[Server] Creating Server instance...');
   
   const server = new Server(
-    { name: 'opengov-mcp-server', version: '0.1.5' },
+    { name: 'socrata-mcp-server', version: '0.1.5' },
     {
       capabilities: {
         tools: {},
@@ -149,7 +149,7 @@ async function createServer(transport?: OpenAICompatibleTransport): Promise<Serv
           }
         },
         serverInfo: {
-          name: 'opengov-mcp-server',
+          name: 'socrata-mcp-server',
           version: '0.1.5'
         }
       };

@@ -1,5 +1,5 @@
 {
-  "name": "opengov-mcp-server",
+  "name": "socrata-mcp-server",
   "version": "0.1.5",
   "description": "MCP server that enables a client, such as Claude Desktop, to access open government data through Socrata APIs",
   "private": false,
@@ -9,7 +9,7 @@
   },
   "main": "./dist/index.js",
   "bin": {
-    "opengov-mcp-server": "./dist/index.js"
+    "socrata-mcp-server": "./dist/index.js"
   },
   "scripts": {
     "clean": "rm -rf dist",
@@ -39,14 +39,14 @@
   ],
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/npstorey/opengov-mcp-server.git"
+    "url": "git+https://github.com/npstorey/socrata-mcp-server.git"
   },
   "author": "Scott Robbin <scott@robbin.co>",
   "license": "MIT",
   "bugs": {
-    "url": "https://github.com/npstorey/opengov-mcp-server/issues"
+    "url": "https://github.com/npstorey/socrata-mcp-server/issues"
   },
-  "homepage": "https://github.com/npstorey/opengov-mcp-server#readme",
+  "homepage": "https://github.com/npstorey/socrata-mcp-server#readme",
   "files": [
     "dist/index.js",
     "dist/index.js.map",

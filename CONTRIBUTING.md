@@ -8,7 +8,7 @@ Thank you for your interest in contributing to Socrata MCP Server! This project 
 
 1. **Clone the repository**:
    ```bash
-   git clone https://github.com/yourusername/socrata-mcp-server.git
+   git clone https://github.com/npstorey/socrata-mcp-server.git
    cd socrata-mcp-server
    ```
 
@@ -98,6 +98,10 @@ Here are some areas where contributions would be particularly valuable:
 - Better error handling and reporting
 - Additional example use cases
 - Improved documentation
+
+## This is a multi-repo project
+
+This MCP server is one part of a larger project. If you're unsure where to contribute, see the [civic-ai-tools CONTRIBUTING guide](https://github.com/npstorey/civic-ai-tools/blob/main/CONTRIBUTING.md) for an overview of all three repos.
 
 ## License
 

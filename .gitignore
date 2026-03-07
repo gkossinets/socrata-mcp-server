@@ -34,6 +34,9 @@ yarn-error.log*
 ehthumbs.db
 Thumbs.db
 
+# Temp files
+temp/
+
 # Documentation (downloaded from external sources)
 docs/
 

@@ -1,201 +1,85 @@
-# OpenGov MCP Server
+# Socrata MCP Server
 
-A Model Context Protocol (MCP) server for accessing open government data through Socrata Open Data APIs.
+A [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) server that connects AI tools to open data on any [Socrata](https://www.tylertech.com/products/socrata)-powered portal — including NYC, Chicago, San Francisco, and hundreds of other cities.
 
-## Features
+> **Formerly known as opengov-mcp-server.** Renamed to avoid confusion with OpenGov Inc.
 
-- Search and retrieve data from any Socrata-powered open data portal
-- Full-text search across datasets and within datasets
-- Support for complex SoQL queries
-- OpenAI MCP wizard compatibility
-- Efficient caching and size limits for optimal performance
+## What it does
 
-## Quick Start
+This server gives AI assistants (Claude, Copilot, Cursor) direct access to public datasets via Socrata's open data API. Instead of the AI guessing at data, it can query real civic data in real time.
+
+**Example queries an AI can answer with this server:**
+- "What are the top 311 complaint types in Brooklyn this month?"
+- "Show me restaurant inspection trends in Manhattan"
+- "Compare crime data across Chicago neighborhoods"
+
+## Quick start
 
 ```bash
-# Install dependencies
 npm install
-
-# Run locally
-npm run dev
-
-# Access at http://localhost:10000
+npm run build
+npm run dev   # Starts on http://localhost:10000
 ```
 
-## Environment Variables
+### Environment variables
 
 ```bash
-# Default data portal (optional)
-DATA_PORTAL_URL=https://data.cityofnewyork.us
+# .env
+PORT=10000
+DATA_PORTAL_URL=https://data.cityofnewyork.us  # Default portal (optional)
 ```
 
-## Available Tools
+## Available tools
 
-### search
-Search for datasets or documents within datasets. Returns ID/score pairs for efficient retrieval.
+| Tool | Description |
+|------|-------------|
+| `get_data` | Unified data access: catalog search, metadata lookup, SoQL queries, and dataset metrics |
+| `search` | Search for datasets or records, returns ID/score pairs |
+| `fetch` | Retrieve full dataset metadata or records by ID |
 
-### fetch
-Retrieve dataset metadata or specific records using the IDs returned from `search`. Each response follows the OpenAI MCP shape with `id`, `title`, `text`, `url`, and optional `metadata`.
+## Supported portals
 
-## Cross-Domain Search Examples
+Works with any Socrata-powered open data portal. Some popular ones:
 
-### Search Chicago Crime Data
+| City | Portal |
+|------|--------|
+| New York City | `data.cityofnewyork.us` |
+| Chicago | `data.cityofchicago.org` |
+| San Francisco | `data.sfgov.org` |
+| Seattle | `data.seattle.gov` |
+| Los Angeles | `data.lacity.org` |
 
-Search across all Chicago datasets for crime-related data:
+## Transport
 
-```bash
-# Search without specifying a dataset ID
-curl -X POST http://localhost:10000/mcp \
-  -H "Content-Type: application/json" \
-  -H "Accept: text/event-stream" \
-  -H "mcp-session-id: YOUR_SESSION_ID" \
-  -d '{
-    "jsonrpc": "2.0",
-    "method": "tools/call",
-    "params": {
-      "name": "search",
-      "arguments": {
-        "domain": "data.cityofchicago.org",
-        "query": "crime",
-        "limit": 5
-      }
-    },
-    "id": 1
-  }'
-```
+- **stdio** — For local use with Claude Code, Cursor, and VS Code Copilot
+- **HTTP (Streamable HTTP)** — For web applications. Endpoint: `POST /mcp`
 
-This returns dataset IDs in the format `dataset_id:catalog` for datasets matching "crime".
-
-### Retrieve Dataset Metadata
-
-Use the encoded IDs from the search to get dataset details:
-
-```bash
-# Retrieve metadata for crime datasets
-curl -X POST http://localhost:10000/mcp \
-  -H "Content-Type: application/json" \
-  -H "Accept: text/event-stream" \
-  -H "mcp-session-id: YOUR_SESSION_ID" \
-  -d '{
-    "jsonrpc": "2.0",
-    "method": "tools/call",
-    "params": {
-      "name": "fetch",
-      "arguments": {
-        "domain": "data.cityofchicago.org",
-        "ids": ["ijzp-q8t2:catalog", "6zsd-86xi:catalog"]
-      }
-    },
-    "id": 2
-  }'
-```
-
-### Search Within a Specific Dataset
-
-Once you have a dataset ID, search within it:
-
-```bash
-# Search for theft crimes in Chicago crime dataset
-curl -X POST http://localhost:10000/mcp \
-  -H "Content-Type: application/json" \
-  -H "Accept: text/event-stream" \
-  -H "mcp-session-id: YOUR_SESSION_ID" \
-  -d '{
-    "jsonrpc": "2.0",
-    "method": "tools/call",
-    "params": {
-      "name": "search",
-      "arguments": {
-        "dataset_id": "ijzp-q8t2",
-        "domain": "data.cityofchicago.org",
-        "query": "theft",
-        "limit": 10
-      }
-    },
-    "id": 3
-  }'
-```
-
-### Retrieve Specific Records
-
-Get full details for specific crime records:
-
-```bash
-# Retrieve specific crime records by ID
-curl -X POST http://localhost:10000/mcp \
-  -H "Content-Type: application/json" \
-  -H "Accept: text/event-stream" \
-  -H "mcp-session-id: YOUR_SESSION_ID" \
-  -d '{
-    "jsonrpc": "2.0",
-    "method": "tools/call",
-    "params": {
-      "name": "fetch",
-      "arguments": {
-        "dataset_id": "ijzp-q8t2",
-        "domain": "data.cityofchicago.org",
-        "ids": ["12345", "67890"]
-      }
-    },
-    "id": 4
-  }'
-```
-
-## SoQL Query Examples
-
-Use complex queries with the legacy `get_data` tool:
-
-```bash
-# Get crime counts by type
-curl -X POST http://localhost:10000/mcp \
-  -H "Content-Type: application/json" \
-  -H "Accept: text/event-stream" \
-  -H "mcp-session-id: YOUR_SESSION_ID" \
-  -d '{
-    "jsonrpc": "2.0",
-    "method": "tools/call",
-    "params": {
-      "name": "get_data",
-      "arguments": {
-        "type": "query",
-        "dataset_id": "ijzp-q8t2",
-        "domain": "data.cityofchicago.org",
-        "query": "SELECT primary_type, COUNT(*) as count GROUP BY primary_type ORDER BY count DESC LIMIT 10"
-      }
-    },
-    "id": 5
-  }'
-```
-
-## ID Encoding Format
-
-When searching without a dataset ID, results use encoded IDs:
-- Dataset metadata: `dataset_id:catalog`
-- Regular records: `dataset_id:row_id`
-- Row-based records: `row_N` (where N is the row index)
-
-The fetch tool automatically parses these encoded IDs.
-
-## Popular Open Data Portals
-
-- New York City: `data.cityofnewyork.us`
-- Chicago: `data.cityofchicago.org`
-- San Francisco: `data.sfgov.org`
-- Seattle: `data.seattle.gov`
-- Los Angeles: `data.lacity.org`
+The deployed instance at `https://socrata-mcp-server.onrender.com` powers [civicaitools.org](https://civicaitools.org).
 
 ## Development
 
 ```bash
-# Run tests
-npm test
-
-# Build TypeScript
-npm run build
-
-# Start development server
-npm run dev
+npm test          # Run tests
+npm run build     # Build TypeScript
+npm run dev       # Start dev server
+npm run lint      # Lint
 ```
+
+## Related projects
+
+| Repository | Description |
+|-----------|-------------|
+| [civic-ai-tools](https://github.com/npstorey/civic-ai-tools) | Starter project that bundles this server with Data Commons MCP for multi-source civic data queries |
+| [civic-ai-tools-website](https://github.com/npstorey/civic-ai-tools-website) | Demo website at [civicaitools.org](https://civicaitools.org) — side-by-side comparison of AI with and without live data |
+| [odp-mcp](https://github.com/socrata/odp-mcp) | Socrata's official MCP server (similar functionality, different implementation) |
+
+## Contributing
+
+Contributions are welcome! See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+
+## Disclaimer
+
+This is a personal project and is not affiliated with, endorsed by, or representative of any employer or organization.
 
 ## License
 

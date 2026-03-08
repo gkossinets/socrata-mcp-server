@@ -23,12 +23,19 @@ This skill provides specialized guidance for:
 - Use inline citations
 - When the user specifies a date or time period (e.g., "in 2025", "last December", "this month"), ALWAYS use that date in your query. Default date ranges only apply when the user doesn't specify a time period.
 - Add date filters when querying large or high-volume datasets to avoid performance issues and overly broad results. Use the Date Range Guidelines table to pick an appropriate range. Tell the user you applied a date filter, why, and that they can ask for a different range or all-time data if needed.
+- Use the actual current date (from the system prompt if provided), not your training cutoff. Default to rolling windows: "past two years" = 24 months back from today, "last year" = past 12 months. State your interpretation before querying: "I'm interpreting 'past two years' as [start] to [end]."
+- When a query has significant ambiguity that would change the analysis (which dataset, timeframe, or metric), ask one brief clarifying question before querying. For minor ambiguity, state your assumption and proceed: "I'll look at 311 noise complaints in Brooklyn for the past 12 months — let me know if you meant something different." Never ask more than one clarifying question at a time.
 
 **NEVER:**
 - Invent data points
 - Extrapolate beyond actual records
 - Present findings without tool evidence
 - Query without column discovery
+
+## Workflow
+
+- **Plan first**: Before executing any tool calls, briefly state your plan: what dataset you'll query, what timeframe, what filters, and how you interpreted the user's question. This lets the user catch misinterpretations before tool calls are made.
+- **Narrate as you go**: After stating your plan, narrate each phase briefly — "Retrieving data..." before tool calls, "Analyzing results..." after getting data back, then proceed to synthesis. Keep narration to one line per phase.
 
 ## Query Complexity Assessment
 

@@ -139,6 +139,14 @@ ORDER BY year
 | Building Permits | ~200–800/day | Up to 180 days | Up to 90 days |
 | Business Licenses | ~50–200/day | Up to 1 year | Up to 180 days |
 
+## Pagination
+
+- Default to LIMIT 500 for raw data queries (SELECT * or SELECT field1, field2, …).
+- If you get back exactly N rows (where N = your LIMIT), tell the user there may be more and offer to fetch the next page.
+- Use OFFSET to paginate: SELECT … LIMIT 500 OFFSET 500 for page 2, OFFSET 1000 for page 3, etc.
+- For aggregation queries (COUNT, SUM, GROUP BY), pagination is rarely needed — the result set is already small.
+- Never request more than 10,000 rows in a single call. If you need to scan more data, use aggregation instead.
+
 ## Key Datasets by Portal
 
 Below are the most-used datasets per portal for quick reference. Use the MCP search tool for datasets not listed here.

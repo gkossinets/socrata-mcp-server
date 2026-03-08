@@ -705,6 +705,49 @@ function parseFetchIdentifier(rawId: string): ParsedFetchIdentifier {
   );
 }
 
+const SEARCH_PREVIEW_ROW_LIMIT = 5;
+
+// Fetch column metadata and preview rows for a single dataset.
+// Returns partial enrichment — either field may be undefined on failure.
+async function fetchEnrichment(
+  datasetId: string,
+  domain: string
+): Promise<{
+  columns?: { fieldName: string; dataTypeName: string; description?: string }[];
+  preview_rows?: Record<string, unknown>[];
+}> {
+  const baseUrl = `https://${domain}`;
+
+  const [columnsResult, previewResult] = await Promise.all([
+    fetchFromSocrataApi<ColumnInfo[]>(
+      `/api/views/${datasetId}/columns`,
+      {},
+      baseUrl
+    ).catch(() => null),
+    fetchFromSocrataApi<Record<string, unknown>[]>(
+      `/resource/${datasetId}.json`,
+      { $limit: SEARCH_PREVIEW_ROW_LIMIT },
+      baseUrl
+    ).catch(() => null)
+  ]);
+
+  const columns = columnsResult
+    ? columnsResult
+        .filter((col: any) => !col.flags?.includes('hidden'))
+        .map((col: any) => ({
+          fieldName: col.fieldName,
+          dataTypeName: col.dataTypeName,
+          ...(col.description ? { description: col.description } : {})
+        }))
+    : undefined;
+
+  const preview_rows = previewResult
+    ? previewResult.slice(0, SEARCH_PREVIEW_ROW_LIMIT)
+    : undefined;
+
+  return { columns, preview_rows };
+}
+
 // Handler for the new search tool
 export async function handleSearchTool(
   rawParams: SearchToolParams | any
@@ -719,19 +762,33 @@ export async function handleSearchTool(
     offset: 0
   });
 
-  const results = catalogResults.map((dataset: any) => {
+  // Build base results, then enrich in parallel
+  const baseResults = catalogResults.map((dataset: any) => {
     const datasetId = dataset.resource?.id || dataset.id;
     const title = dataset.resource?.name || dataset.name || datasetId;
     const description = dataset.resource?.description || dataset.description || '';
 
-    const encodedId = `dataset:${domain}:${datasetId}`;
-    const url = `https://${domain}/dataset/${datasetId}`;
-
     return {
-      id: encodedId,
+      datasetId,
+      id: `dataset:${domain}:${datasetId}`,
       title,
-      url,
+      url: `https://${domain}/dataset/${datasetId}`,
       snippet: typeof description === 'string' ? description.slice(0, 200) : undefined
+    };
+  });
+
+  // Fetch enrichment for all results in parallel
+  const enrichments = await Promise.all(
+    baseResults.map(r => fetchEnrichment(r.datasetId, domain))
+  );
+
+  const results = baseResults.map((base, i) => {
+    const { datasetId, ...result } = base;
+    const enrichment = enrichments[i];
+    return {
+      ...result,
+      ...(enrichment.columns ? { columns: enrichment.columns } : {}),
+      ...(enrichment.preview_rows ? { preview_rows: enrichment.preview_rows } : {})
     };
   });
 

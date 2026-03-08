@@ -265,17 +265,18 @@ describe('Socrata Tools', () => {
     });
 
     it('should map query to $query for query operations', async () => {
-      await handleSocrataTool({ 
-        type: 'query', 
-        dataset_id: 'abc-123', 
-        query: 'SELECT * WHERE amount > 1000' 
+      await handleSocrataTool({
+        type: 'query',
+        dataset_id: 'abc-123',
+        query: 'SELECT * WHERE amount > 1000'
       });
-      
+
       expect(mockedFetchFromSocrataApi).toHaveBeenCalledTimes(1);
+      // Raw query gets safety LIMIT appended by clampRawQueryLimit
       expect(mockedFetchFromSocrataApi).toHaveBeenCalledWith(
         '/resource/abc-123.json',
         expect.objectContaining({
-          $query: 'SELECT * WHERE amount > 1000'
+          $query: 'SELECT * WHERE amount > 1000 LIMIT 10000'
         }),
         'https://data.cityofchicago.org'
       );

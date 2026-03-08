@@ -339,7 +339,8 @@ describe('Search Tool', () => {
         is_sample: false,
         returned_rows: MAX_ROWS,
         total_rows: MAX_ROWS,
-        has_more: true // Indicates there might be more data
+        has_more: true, // Indicates there might be more data
+        limit_note: expect.stringContaining('Results limited to')
       });
     });
 

@@ -4,6 +4,49 @@ import { fetchFromSocrataApi } from '../utils/api.js';
 export const MAX_ROWS = 50000; // Socrata per-request hard limit
 export const DEFAULT_PREVIEW_ROWS = 1000; // Default preview size for large datasets
 export const ROW_FETCH_CAP = parseInt(process.env.ROW_FETCH_CAP || '100000', 10); // Configurable cap for "all" requests
+export const MAX_RAW_ROWS = parseInt(process.env.MAX_RAW_ROWS || '10000', 10); // Max rows for non-aggregation queries
+
+// Detect whether a SoQL query uses aggregation (GROUP BY or aggregate functions)
+const AGGREGATION_PATTERN = /\b(GROUP\s+BY|COUNT\s*\(|SUM\s*\(|AVG\s*\(|MIN\s*\(|MAX\s*\()\b/i;
+
+function isAggregationQuery(soql: string): boolean {
+  return AGGREGATION_PATTERN.test(soql);
+}
+
+// Parse the LIMIT value from a SoQL query string, returns undefined if no LIMIT clause
+function parseSoqlLimit(soql: string): number | undefined {
+  const match = soql.match(/\bLIMIT\s+(\d+)/i);
+  return match ? parseInt(match[1], 10) : undefined;
+}
+
+// Replace or append a LIMIT clause in a SoQL query
+function setSoqlLimit(soql: string, limit: number): string {
+  if (/\bLIMIT\s+\d+/i.test(soql)) {
+    return soql.replace(/\bLIMIT\s+\d+/i, `LIMIT ${limit}`);
+  }
+  return `${soql.trimEnd()} LIMIT ${limit}`;
+}
+
+// Clamp a raw (non-aggregation) SoQL query's LIMIT to MAX_RAW_ROWS.
+// Returns { query, clamped } where clamped is true if the limit was reduced or added.
+function clampRawQueryLimit(soql: string): { query: string; clamped: boolean; originalLimit?: number } {
+  if (isAggregationQuery(soql)) {
+    return { query: soql, clamped: false };
+  }
+
+  const existingLimit = parseSoqlLimit(soql);
+
+  if (existingLimit === undefined) {
+    // No LIMIT on a raw query — add safety default
+    return { query: setSoqlLimit(soql, MAX_RAW_ROWS), clamped: true };
+  }
+
+  if (existingLimit > MAX_RAW_ROWS) {
+    return { query: setSoqlLimit(soql, MAX_RAW_ROWS), clamped: true, originalLimit: existingLimit };
+  }
+
+  return { query: soql, clamped: false };
+}
 
 // Response type with metadata
 export interface SearchResponse {
@@ -73,24 +116,35 @@ export async function handleSearch(params: {
   // If a full SoQL query is provided, we can't easily determine row count
   // So we'll fetch with the query and check results
   if (soqlQuery && soqlQuery.trim().length > 0) {
+    // Clamp raw (non-aggregation) queries to MAX_RAW_ROWS
+    const { query: clampedQuery, clamped, originalLimit } = clampRawQueryLimit(soqlQuery);
+
     const apiParams: Record<string, unknown> = {
-      $query: soqlQuery
+      $query: clampedQuery
     };
-    
+
     const baseUrl = `https://${domain}`;
     const data = await fetchFromSocrataApi<Record<string, unknown>[]>(
       `/resource/${datasetId}.json`,
       apiParams,
       baseUrl
     );
-    
-    return {
+
+    const result: SearchResponse = {
       data,
       is_sample: false,
       returned_rows: data.length,
       total_rows: data.length, // Can't determine total with custom query
       has_more: data.length === MAX_ROWS // Might have more if we hit the limit
     };
+
+    if (clamped) {
+      (result as any).limit_note = originalLimit
+        ? `Results limited to ${MAX_RAW_ROWS.toLocaleString()} rows (requested ${originalLimit.toLocaleString()}). Use aggregation (GROUP BY) to analyze the full dataset.`
+        : `Results limited to ${MAX_RAW_ROWS.toLocaleString()} rows (safety default). Use aggregation (GROUP BY) to analyze the full dataset, or add an explicit LIMIT if you need fewer rows.`;
+    }
+
+    return result;
   }
 
   // Get total row count first

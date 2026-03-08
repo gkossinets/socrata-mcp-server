@@ -6,7 +6,7 @@ A [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) server that c
 
 ## What it does
 
-This server gives AI assistants (Claude, Copilot, Cursor) direct access to public datasets via Socrata's open data API. Instead of the AI guessing at data, it can query real civic data in real time.
+This server gives AI assistants (Claude, Copilot, Cursor, Codex) direct access to public datasets via Socrata's open data API. Instead of the AI guessing at data, it can query real civic data in real time.
 
 **Example queries an AI can answer with this server:**
 - "What are the top 311 complaint types in Brooklyn this month?"
@@ -15,7 +15,35 @@ This server gives AI assistants (Claude, Copilot, Cursor) direct access to publi
 
 ## Quick start
 
+### Use with npx (no install needed)
+
 ```bash
+npx socrata-mcp-server --stdio
+```
+
+### Claude Desktop configuration
+
+Add this to your Claude Desktop config (`~/Library/Application Support/Claude/claude_desktop_config.json` on macOS):
+
+```json
+{
+  "mcpServers": {
+    "socrata": {
+      "command": "npx",
+      "args": ["-y", "socrata-mcp-server", "--stdio"],
+      "env": {
+        "DEFAULT_DOMAIN": "data.cityofnewyork.us"
+      }
+    }
+  }
+}
+```
+
+### Development
+
+```bash
+git clone https://github.com/npstorey/socrata-mcp-server.git
+cd socrata-mcp-server
 npm install
 npm run build
 npm run dev   # Starts on http://localhost:10000

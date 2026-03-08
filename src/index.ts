@@ -685,7 +685,7 @@ async function startApp() {
 
     // Root endpoint
     app.get('/', (_req, res) => {
-      res.send('OpenGov MCP Server running');
+      res.send('Socrata MCP Server running');
     });
     
     // Debug endpoint to test server

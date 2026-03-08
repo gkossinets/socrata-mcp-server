@@ -10,6 +10,7 @@ import {
   TagInfo,
   ColumnInfo
 } from '../utils/api.js';
+import axios from 'axios';
 import { handleSearch } from './search.js';
 import { retrieveDocuments } from './document-retrieval.js';
 // import { McpToolHandlerContext } from '@modelcontextprotocol/sdk/types.js'; // Removed incorrect import
@@ -194,6 +195,51 @@ async function handleColumnInfo(params: {
   return response;
 }
 
+// Handler for metrics — derives stats from the metadata endpoint.
+// Socrata has no dedicated public metrics API, so we extract useful stats
+// from /api/views/{id} (view count, timestamps, etc.) and a COUNT(*) query
+// for the actual row count.
+async function handleMetrics(params: {
+  datasetId: string;
+  domain?: string;
+}): Promise<Record<string, unknown>> {
+  const { datasetId, domain = getDefaultDomain() } = params;
+
+  const baseUrl = `https://${domain}`;
+
+  // Fetch metadata and row count in parallel.
+  // Row count uses a direct GET to avoid the SODA3 POST routing in fetchFromSocrataApi.
+  const [metadata, countResult] = await Promise.all([
+    fetchFromSocrataApi<Record<string, unknown>>(
+      `/api/views/${datasetId}`,
+      {},
+      baseUrl
+    ),
+    axios.get<Record<string, unknown>[]>(
+      `${baseUrl}/resource/${datasetId}.json`,
+      { params: { '$select': 'count(*) as count', '$limit': 1 } }
+    ).then(res => res.data).catch(() => null)
+  ]);
+
+  const rowCount = countResult?.[0]?.count ?? null;
+
+  return {
+    id: datasetId,
+    name: metadata.name,
+    rowCount,
+    viewCount: metadata.viewCount,
+    downloadCount: metadata.downloadCount,
+    createdAt: metadata.createdAt,
+    rowsUpdatedAt: metadata.rowsUpdatedAt,
+    metadataUpdatedAt: metadata.metadataUpdatedAt,
+    dataUpdatedAt: metadata.dataUpdatedAt,
+    category: metadata.category,
+    attribution: metadata.attribution,
+    owner: (metadata as any).owner?.displayName,
+    numberOfComments: metadata.numberOfComments,
+  };
+}
+
 // Handler for data access functionality (preserved for backward compatibility)
 async function handleDataAccess(params: {
   datasetId: string;
@@ -262,12 +308,13 @@ export const fetchToolZodSchema = z.object({
 // 1️⃣ Zod definition for the Socrata tool's parameters.
 // This is used by the MCP SDK to parse/validate parameters from the client.
 export const socrataToolZodSchema = z.object({
-  type: z.enum(['catalog','metadata','query'])
+  type: z.enum(['catalog','metadata','query','metrics'])
          .describe('Operation to perform'),
   query: z.string().min(1).optional()
          .describe('General search phrase OR a full SoQL query string. If this is a full SoQL query (e.g., starts with SELECT), other SoQL parameters like select, where, q might be overridden or ignored by the handler in favor of the full SoQL query. If it\'s a search phrase, it will likely be used for a full-text search ($q parameter to Socrata).'),
   // Optional parameters - these should also be in jsonParameters if they are to be exposed to the client
   domain: z.string().optional().describe('The Socrata domain (e.g., data.cityofnewyork.us)'),
+  portal: z.string().optional().describe('Alias for domain — the Socrata portal domain'),
   limit: z.union([z.coerce.number().int().positive(), z.literal('all')]).optional().describe('Number of results to return, or "all" to fetch all available data up to configured cap'),
   offset: z.number().int().nonnegative().optional().describe('Offset for pagination'),
   select: z.string().optional().describe('SoQL SELECT clause'),
@@ -275,8 +322,8 @@ export const socrataToolZodSchema = z.object({
   order: z.string().optional().describe('SoQL ORDER BY clause'),
   group: z.string().optional().describe('SoQL GROUP BY clause'),
   having: z.string().optional().describe('SoQL HAVING clause'),
-  dataset_id: z.string().optional().describe('Dataset ID (for metadata, column-info, data-access)'), // Added for clarity, though 'query' is often used for this
-  q: z.string().optional().describe('Full-text search query within the dataset (used in data access)') // Added q
+  dataset_id: z.string().optional().describe('Dataset ID (for metadata, metrics, data-access)'),
+  q: z.string().optional().describe('Full-text search query within the dataset (used in data access)')
 });
 
 // Infer the type from the Zod schema for use in the handler
@@ -291,7 +338,7 @@ const jsonParameters: any = {
   properties: {
     type: {
       type: 'string',
-      enum: ['catalog', 'metadata', 'query'],
+      enum: ['catalog', 'metadata', 'query', 'metrics'],
       description: 'Operation to perform'
     },
     query: {
@@ -302,6 +349,10 @@ const jsonParameters: any = {
     domain: {
       type: 'string',
       description: 'The Socrata domain (e.g., data.cityofnewyork.us)'
+    },
+    portal: {
+      type: 'string',
+      description: 'Alias for domain — the Socrata portal domain'
     },
     limit: {
       type: 'string',
@@ -402,15 +453,17 @@ export async function handleSocrataTool(
   rawParams: SocrataToolParams | any
   // context?: McpToolHandlerContext // Context removed for now to align with Tool.handler type
 ): Promise<unknown> {
-  // Map old parameter names to new ones for backward compatibility
+  // Map old parameter names and aliases for backward compatibility
   const params: SocrataToolParams = {
     ...rawParams,
-    dataset_id: rawParams.dataset_id || rawParams.datasetId
+    dataset_id: rawParams.dataset_id || rawParams.datasetId,
+    // Accept 'portal' as alias for 'domain'
+    domain: rawParams.domain || rawParams.portal
   };
 
   const type = params.type; // Directly use the parsed 'type'
   const query = params.query; // Directly use the parsed 'query'
-  
+
   // Use a mutable copy for potential modifications like adding default domain/limit/offset.
   const modifiableParams: Partial<SocrataToolParams> = { ...params };
 
@@ -507,28 +560,16 @@ export async function handleSocrataTool(
         having: passAsHaving,
         q: passAsQ
       });
-    // The following cases are not in the socrataToolZodSchema's 'type' enum,
-    // so they won't be directly callable unless the schema is updated.
-    // Consider adding them to the enum and jsonParameters if they should be exposed.
-    /* 
-    case 'categories':
-      return handleCategories({ domain: modifiableParams.domain });
-    case 'tags':
-      return handleTags({ domain: modifiableParams.domain });
-    case 'column-info':
-      if (!modifiableParams.datasetId) {
-        throw new Error('datasetId is required for type=column-info');
-      }
-      return handleColumnInfo({
-        datasetId: modifiableParams.datasetId,
-        domain: modifiableParams.domain,
+    case 'metrics':
+      const metricsDatasetId = modifiableParams.dataset_id || query;
+      if (!metricsDatasetId) throw new Error('dataset_id is required for type=metrics');
+      return handleMetrics({
+        datasetId: metricsDatasetId,
+        domain: modifiableParams.domain
       });
-    */
     default:
-      // This case should ideally not be reached if SDK validation is working with the enum.
-      // However, to satisfy exhaustiveness for `type` from SocrataToolParams:
       const exhaustiveCheck: never = type;
-      throw new Error(`Unknown Socrata operation type: ${exhaustiveCheck}. Supported types are catalog, metadata, query.`);
+      throw new Error(`Unknown Socrata operation type: ${exhaustiveCheck}. Supported types are catalog, metadata, query, metrics.`);
   }
 }
 

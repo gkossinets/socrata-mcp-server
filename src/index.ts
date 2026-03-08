@@ -21,6 +21,9 @@ import {
 import { z } from 'zod';
 import { ListToolsRequestSchema, CallToolRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 import { McpError, ErrorCode } from './utils/mcp-errors.js';
+import { BASE_SKILL } from './skills/base.js';
+import { WEB_SKILL } from './skills/web.js';
+import { LOCAL_SKILL } from './skills/local.js';
 
 // Workaround: Define schemas locally since they're not properly exported from SDK
 const ListPromptsRequestSchema = z.object({
@@ -41,6 +44,14 @@ const ReadResourceRequestSchema = z.object({
   method: z.literal("resources/read"),
   params: z.object({
     uri: z.string()
+  })
+});
+
+const GetPromptRequestSchema = z.object({
+  method: z.literal("prompts/get"),
+  params: z.object({
+    name: z.string(),
+    arguments: z.optional(z.record(z.string()))
   })
 });
 
@@ -66,6 +77,9 @@ async function createServer(transport?: OpenAICompatibleTransport): Promise<Serv
     }
   );
   
+  // Track transport type for modality inference in GetPrompt
+  const isHttpTransport = !!transport;
+
   // Store transport reference on server for initialize handler
   if (transport) {
     (server as any)._customTransport = transport;
@@ -248,6 +262,18 @@ async function createServer(transport?: OpenAICompatibleTransport): Promise<Serv
             required: true
           }
         ]
+      },
+      {
+        name: 'skill-guidance',
+        title: 'Socrata Query Skill Guidance',
+        description: 'Socrata query skill guidance composed for your context (web or local)',
+        arguments: [
+          {
+            name: 'modality',
+            description: 'web or local — if omitted, inferred from transport (HTTP → web, stdio → local)',
+            required: false
+          }
+        ]
       }
     ];
     
@@ -256,6 +282,85 @@ async function createServer(transport?: OpenAICompatibleTransport): Promise<Serv
     return {
       prompts
     };
+  });
+
+  // Handle GetPrompt
+  server.setRequestHandler(GetPromptRequestSchema, async (request) => {
+    const promptName = request.params.name;
+    const args = request.params.arguments;
+    console.error(`[Server - GetPrompt] Request for prompt: ${promptName}, args:`, args);
+
+    if (promptName === 'skill-guidance') {
+      // Determine modality: explicit arg > transport inference
+      const modality = args?.modality || (isHttpTransport ? 'web' : 'local');
+      const overlay = modality === 'web' ? WEB_SKILL : LOCAL_SKILL;
+      console.error(`[Server - GetPrompt] Composing skill-guidance with modality: ${modality}`);
+
+      return {
+        description: `Socrata query skill guidance (${modality} mode)`,
+        messages: [
+          {
+            role: 'user' as const,
+            content: {
+              type: 'text' as const,
+              text: BASE_SKILL + '\n\n---\n\n' + overlay
+            }
+          }
+        ]
+      };
+    }
+
+    if (promptName === 'analyze_nyc_data') {
+      const topic = args?.topic || 'general NYC data';
+      const timePeriod = args?.time_period ? ` for ${args.time_period}` : '';
+      return {
+        description: `Analyze ${topic} from NYC Open Data`,
+        messages: [
+          {
+            role: 'user' as const,
+            content: {
+              type: 'text' as const,
+              text: `Search and analyze datasets about "${topic}"${timePeriod} from the NYC Open Data portal (data.cityofnewyork.us). Use the get_data tool to discover relevant datasets and run SoQL queries. Provide key findings with data tables and methodology.`
+            }
+          }
+        ]
+      };
+    }
+
+    if (promptName === 'find_dataset') {
+      const description = args?.description || 'data';
+      return {
+        description: `Find NYC datasets matching: ${description}`,
+        messages: [
+          {
+            role: 'user' as const,
+            content: {
+              type: 'text' as const,
+              text: `Help me find datasets on the NYC Open Data portal (data.cityofnewyork.us) that match this description: "${description}". Use the search tool to find relevant datasets and provide their names, IDs, and descriptions.`
+            }
+          }
+        ]
+      };
+    }
+
+    if (promptName === 'compare_neighborhoods') {
+      const metric = args?.metric || 'data';
+      const neighborhoods = args?.neighborhoods || 'all boroughs';
+      return {
+        description: `Compare ${metric} across ${neighborhoods}`,
+        messages: [
+          {
+            role: 'user' as const,
+            content: {
+              type: 'text' as const,
+              text: `Compare ${metric} across these NYC neighborhoods/boroughs: ${neighborhoods}. Use the NYC Open Data portal to find relevant datasets and run comparative queries. Present findings in a comparison table.`
+            }
+          }
+        ]
+      };
+    }
+
+    throw new Error(`Prompt not found: ${promptName}`);
   });
 
   // Handle ListResources

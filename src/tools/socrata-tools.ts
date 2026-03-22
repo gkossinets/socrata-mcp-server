@@ -302,7 +302,7 @@ export const searchToolZodSchema = z.object({
 
 // Fetch tool schema - matches OpenAI requirements (single ID string)
 export const fetchToolZodSchema = z.object({
-  id: z.string().min(1, 'Document ID is required').describe('Identifier returned from the search tool')
+  id: z.string().min(1, 'Document ID is required').describe('Dataset or record identifier. Accepts: a raw dataset ID (e.g. erm2-nwe9), a full Socrata URL, a prefixed identifier (dataset:domain:id), or an ID returned by the search tool.')
 });
 
 // 1️⃣ Zod definition for the Socrata tool's parameters.
@@ -413,7 +413,7 @@ const fetchJsonParameters: any = {
   properties: {
     id: {
       type: 'string',
-      description: 'Identifier returned by the search tool'
+      description: 'Dataset or record identifier. Accepts: a raw dataset ID (e.g. erm2-nwe9), a full Socrata URL, a prefixed identifier (dataset:domain:id or record:domain:id:rowid), or an ID returned by the search tool.'
     }
   },
   required: ['id']
@@ -422,7 +422,7 @@ const fetchJsonParameters: any = {
 // 3️⃣ Tool uses the manually crafted JSON schema
 export const UNIFIED_SOCRATA_TOOL: Tool = {
   name: 'get_data',
-  description: 'A unified tool to interact with Socrata open-data portals.',
+  description: 'Interact with Socrata open-data portals. REQUIRED: type (one of catalog|metadata|query|metrics). Use type=catalog to search for datasets by keyword. Use type=query with dataset_id + query (SoQL SELECT) to query data. Use type=metadata or type=metrics with dataset_id to inspect a specific dataset.',
   inputSchema: jsonParameters,  // Latest MCP spec uses 'inputSchema'
   // Assert the handler type to satisfy the generic Tool.handler signature.
   // The actual call from src/index.ts will provide the correctly typed SocrataToolParams.
@@ -442,7 +442,7 @@ export const SEARCH_TOOL: Tool = {
 export const FETCH_TOOL: Tool = {
   name: 'fetch',
   title: 'Fetch NYC Data Document',
-  description: 'Retrieve full dataset metadata or record content from NYC Open Data portal',
+  description: 'Retrieve full dataset metadata or record content from NYC Open Data portal. REQUIRED: id — accepts a raw dataset ID (e.g. erm2-nwe9), a full dataset URL, a prefixed identifier (dataset:domain:id), or an ID returned by the search tool.',
   inputSchema: fetchJsonParameters,
   handler: handleFetchTool as (params: Record<string, unknown>) => Promise<unknown>
 };
